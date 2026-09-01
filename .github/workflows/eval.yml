@@ -1,0 +1,180 @@
+name: LLM evals
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      effort:
+        description: Effort level for this run
+        type: choice
+        default: medium
+        options: [low, medium, high, xhigh, max]
+      repeats:
+        description: Samples per case (higher = tighter confidence intervals)
+        type: string
+        default: "1"
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EVAL_BUDGET_USD: "5.00"
+
+jobs:
+  # Fast, free, no API key. The end-to-end tests stub the model, so broken
+  # wiring is caught here before anything spends money.
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest
+
+  evals:
+    name: Eval suites
+    needs: unit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -e .
+
+      # Responses are content-addressed by prompt, so a PR only pays for the
+      # suites it actually changed. The key rotates weekly to bound staleness.
+      - name: Restore response cache
+        uses: actions/cache@v4
+        with:
+          path: .eval-cache
+          key: eval-cache-${{ hashFiles('evals/datasets/*.yaml') }}-${{ github.run_id }}
+          restore-keys: |
+            eval-cache-${{ hashFiles('evals/datasets/*.yaml') }}-
+            eval-cache-
+
+      - name: Run evals
+        id: run
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EVAL_EFFORT: ${{ inputs.effort || 'medium' }}
+          EVAL_REPEATS: ${{ inputs.repeats || '1' }}
+          EVAL_CONCURRENCY: "8"
+        # Never abort here - the scorecard must be published even on a red gate,
+        # so the exit code is captured and re-raised in the final step.
+        run: |
+          set +e
+          python -m evals run
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Publish scorecard to the run summary
+        if: always()
+        run: cat reports/scorecard.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
+
+      - name: Comment scorecard on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: llm-evals
+          path: reports/scorecard.md
+
+      - name: Enforce the gate
+        if: always()
+        run: exit ${{ steps.run.outputs.exit_code }}
+
+  # Opt-in A/B run: label a PR `eval:compare` to test a prompt variant against
+  # the current prompt. Advisory only - it never blocks the merge.
+  compare:
+    name: Prompt A/B
+    needs: unit
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'eval:compare')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e .
+
+      - name: Compare variants
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EVAL_REPEATS: "5"
+        run: python -m evals compare --variant "${{ vars.EVAL_VARIANT || 'terse' }}"
+
+      - name: Comment comparison on PR
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: llm-compare
+          path: reports/comparison.md
+
+  # After a merge to main, record the new scores as the baseline that future
+  # PRs are measured against.
+  baseline:
+    name: Update baseline
+    needs: evals
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e .
+
+      - name: Restore response cache
+        uses: actions/cache@v4
+        with:
+          path: .eval-cache
+          key: eval-cache-${{ hashFiles('evals/datasets/*.yaml') }}-${{ github.run_id }}
+          restore-keys: |
+            eval-cache-${{ hashFiles('evals/datasets/*.yaml') }}-
+
+      # More repeats than a PR run: the baseline is compared against for weeks,
+      # so it is worth buying a tighter interval once.
+      - name: Re-run and record baseline
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EVAL_REPEATS: "3"
+          EVAL_BUDGET_USD: "15.00"
+        run: python -m evals run --update-baseline --no-gate
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet baselines/main.json; then
+            echo "baseline unchanged"
+            exit 0
+          fi
+          git add baselines/main.json
+          git commit -m "chore: update eval baseline [skip ci]"
+          git push

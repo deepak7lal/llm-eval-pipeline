@@ -1,0 +1,78 @@
+name: extraction
+description: Pulls structured order details out of free-text email.
+effort: low
+
+system: |
+  Extract order details from the customer email you are given.
+
+  Return only a JSON object with exactly these keys:
+    order_id    (string)
+    item        (string, lowercase)
+    quantity    (integer)
+    urgent      (boolean - true only if the customer asks for expedited handling)
+
+  Output raw JSON with no code fence and no commentary.
+
+variants:
+  schema_first: |
+    Return JSON matching this schema and nothing else:
+
+      {"order_id": string, "item": string (lowercase),
+       "quantity": integer, "urgent": boolean}
+
+    `urgent` is true only when the customer asks for expedited handling.
+    No code fence, no commentary.
+
+cases:
+  - id: simple-order
+    input: |
+      Hi - order A-1042 arrived with only one widget but I ordered three.
+    graders:
+      - type: json_fields
+        equals:
+          order_id: A-1042
+          item: widget
+          quantity: 3
+          urgent: false
+
+  - id: urgent-order
+    input: |
+      URGENT: order B-77 needs 12 blue gaskets shipped overnight, we are down a line.
+    graders:
+      - type: json_fields
+        equals:
+          order_id: B-77
+          quantity: 12
+          urgent: true
+
+  - id: quantity-in-words
+    input: |
+      Regarding order C-9001, please send two replacement cables at your convenience.
+    graders:
+      - type: json_fields
+        equals:
+          order_id: C-9001
+          quantity: 2
+          urgent: false
+
+  - id: no-fence
+    input: |
+      Order D-15, one monitor stand, no rush.
+    graders:
+      - type: regex
+        pattern: '^\s*\{'
+      - type: json_fields
+        equals:
+          order_id: D-15
+          quantity: 1
+          urgent: false
+
+  - id: distractor-numbers
+    input: |
+      Order E-2024 - I need 4 of item 8871 (the large tripod). Ship whenever.
+    graders:
+      - type: json_fields
+        equals:
+          order_id: E-2024
+          quantity: 4
+          urgent: false

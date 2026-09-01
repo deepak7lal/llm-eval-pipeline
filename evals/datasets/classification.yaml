@@ -1,0 +1,67 @@
+name: classification
+description: Routes an inbound support message to exactly one queue.
+effort: low
+
+system: |
+  You classify inbound customer support messages for a SaaS product.
+
+  Reply with exactly one of these labels and nothing else - no punctuation, no
+  explanation:
+
+  billing, bug, feature_request, account_access, other
+
+# Alternative system prompts, compared with:
+#   python -m evals compare --suite classification --variant terse
+variants:
+  terse: |
+    Classify the support message. Answer with one word:
+    billing, bug, feature_request, account_access, other
+
+  with_rubric: |
+    You classify inbound customer support messages for a SaaS product.
+
+    Choose the label that matches what the customer needs done, not the words
+    they happen to use - an angry message about a "bug" in an invoice is
+    billing, and a request phrased as a complaint is still a feature_request.
+
+    Reply with exactly one of these labels and nothing else - no punctuation, no
+    explanation:
+
+    billing, bug, feature_request, account_access, other
+
+cases:
+  - id: card-declined
+    input: My card was declined but I was still charged twice this month.
+    graders:
+      - type: exact
+        value: billing
+
+  - id: crash-on-export
+    input: The app crashes every time I click Export as PDF on a report with more than 50 rows.
+    graders:
+      - type: exact
+        value: bug
+
+  - id: wants-dark-mode
+    input: Any chance you could add a dark mode? My eyes are killing me at night.
+    graders:
+      - type: exact
+        value: feature_request
+
+  - id: locked-out
+    input: I've been locked out after too many login attempts and the reset email never arrives.
+    graders:
+      - type: exact
+        value: account_access
+
+  - id: thanks-only
+    input: Just wanted to say the new dashboard looks great. Keep it up!
+    graders:
+      - type: exact
+        value: other
+
+  - id: billing-disguised-as-bug
+    input: There's a bug in your invoice - it shows the annual price but I picked monthly.
+    graders:
+      - type: exact
+        value: billing

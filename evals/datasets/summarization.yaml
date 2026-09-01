@@ -1,0 +1,43 @@
+name: summarization
+description: Judged free-text summaries - the suite that needs a model grader.
+effort: medium
+
+system: |
+  Summarise the incident report you are given for an executive audience.
+
+  Two sentences maximum. Lead with customer impact, then the cause. Do not
+  include remediation steps or timestamps.
+
+cases:
+  - id: db-failover
+    input: |
+      At 02:14 UTC the primary Postgres node stopped responding to health checks.
+      Automatic failover to the replica took 9 minutes because the replica was
+      still replaying WAL from a bulk import started the previous evening. During
+      that window all writes failed; reads served stale data. 12,400 users saw
+      errors on checkout. Fixed by promoting the replica manually and pausing the
+      import job.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must state that customers could not complete checkout (or that writes
+          failed) and roughly how many were affected. Must attribute the cause to
+          slow failover caused by the replica lagging behind on WAL replay from a
+          bulk import. Must NOT list remediation steps or timestamps. Must be two
+          sentences or fewer.
+
+  - id: cdn-misconfig
+    input: |
+      A cache rule pushed at 15:40 UTC set max-age=0 on all static assets. Origin
+      traffic rose 40x, saturating egress. Page loads went from 800ms to 6s
+      globally for roughly 90 minutes. No data was lost. Rolled back the rule and
+      warmed the cache.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must state that page loads became dramatically slower worldwide for
+          about 90 minutes and that no data was lost. Must attribute the cause to
+          a cache rule that disabled caching of static assets and overloaded the
+          origin. Must NOT include rollback or cache-warming steps, or timestamps.
