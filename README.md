@@ -48,6 +48,18 @@ Cost: $0.1056 of a $5.00 budget.
 - `classification` / `billing-disguised-as-bug` - 2/5 passed
 ```
 
+## See it work, without an API key
+
+```bash
+python scripts/demo.py
+```
+
+Seven scenarios against a simulated model - a healthy run, a real regression
+that blocks the merge, a drop that *looks* identical but is refused as noise, a
+flaky case, cost accounting, an A/B comparison, and the power analysis behind
+the sample sizes. Runs offline in about two seconds. Only the model is faked;
+the runner, gate, and scorecard are the real ones.
+
 ## Setup
 
 ```bash
