@@ -1,8 +1,24 @@
 # llm-eval-pipeline
 
-Statistically-gated evaluation harness for Claude-powered features. Suites of
-prompts live as YAML, run against the Claude API on every pull request, and gate
-the merge when quality actually drops — not when it merely looks like it did.
+Statistically-gated evaluation harness for LLM-powered features. Suites of
+prompts live as YAML, run against the model under test on every pull request,
+and gate the merge when quality actually drops — not when it merely looks like
+it did. Built for Claude; runs on Gemini, Groq, OpenRouter or local Ollama too.
+
+## Status: the gate is red on purpose
+
+CI evaluates against `openai/gpt-oss-20b` on Groq's free tier, because that is
+the API access available here. The 80% floor was set for Claude. That model
+scores 66.7% on the summarization suite, so the gate fails the build.
+
+It is working. The five failing trials are real: one summary called internal
+logs publicly accessible, another omitted that deleted audit history was
+unrecoverable, three dropped a required scope claim. Setting the floor to 60%
+would turn the build green and the gate into decoration, which is what the next
+section argues against, so the threshold stays where it is.
+
+Point `EVAL_PROVIDER` back at `anthropic` with a key and the floor, the criteria
+and the suites line up again. See [Providers](#providers).
 
 ## Why this exists
 
