@@ -71,6 +71,11 @@ Credentials resolve from `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an
 `ant auth login` profile — in that order. Nothing is hardcoded. In CI, add the
 key as the repository secret `ANTHROPIC_API_KEY`.
 
+`.env` is read automatically at startup and is gitignored. A real environment
+variable always wins over the file, so an export or a CI secret overrides it
+rather than the other way round. The file is skipped under `pytest`, so a local
+provider setting cannot change what the test suite measures.
+
 No Anthropic key? The harness runs against several other providers, two of them
 free and one entirely local. See [Providers](#providers).
 

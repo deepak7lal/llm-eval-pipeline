@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 # Imported for its preset table only - providers.py depends on nothing here,
 # so this cannot cycle.
 from .providers import PRESETS
+
+# Must run before anything below reads the environment. Skipped under pytest so
+# a local .env cannot change what the suite measures.
+from .dotenv import load as _load_dotenv
+
+if "pytest" not in sys.modules:
+    _load_dotenv()
 
 _PROVIDER_DEFAULT_MODELS = {name: preset[2] for name, preset in PRESETS.items()}
 
