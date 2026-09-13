@@ -22,7 +22,7 @@ PRICING: dict[str, tuple[float, float]] = {
     # flagging them as unknown - they genuinely cost nothing within quota.
     "gemini-2.0-flash": (0.0, 0.0),
     "gemini-2.5-flash": (0.0, 0.0),
-    "llama-3.3-70b-versatile": (0.0, 0.0),
+    "openai/gpt-oss-20b": (0.0, 0.0),
     "meta-llama/llama-3.3-70b-instruct:free": (0.0, 0.0),
     "llama3.2": (0.0, 0.0),
 }

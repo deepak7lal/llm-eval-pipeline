@@ -72,7 +72,7 @@ class TestConfigIntegration:
         "provider,expected",
         [
             ("gemini", "gemini-2.0-flash"),
-            ("groq", "llama-3.3-70b-versatile"),
+            ("groq", "openai/gpt-oss-20b"),
             ("ollama", "llama3.2"),
             ("anthropic", "claude-opus-5"),
         ],
