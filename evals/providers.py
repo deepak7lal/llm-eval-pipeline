@@ -116,7 +116,7 @@ PRESETS: dict[str, tuple[str, str, str]] = {
     "groq": (
         "https://api.groq.com/openai/v1",
         "GROQ_API_KEY",
-        "llama-3.3-70b-versatile",
+        "openai/gpt-oss-20b",
     ),
     "openrouter": (
         "https://openrouter.ai/api/v1",
