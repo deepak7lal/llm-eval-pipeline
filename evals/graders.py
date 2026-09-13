@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from typing import Callable
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from . import config
 
@@ -117,14 +117,26 @@ the criteria mention them.
 2 = addresses the task but violates a criterion.
 1 = does not address the task, or is factually wrong."""
 
+# Appended only for providers without a structured-output guarantee.
+_JSON_INSTRUCTION = """
+
+Reply with only this JSON object, no code fence and no commentary:
+{"score": <integer 1-5>, "reasoning": "<one or two sentences>"}"""
+
 
 def llm_judge(output: str, spec: dict, case: dict) -> GradeResult:
     """Score with a judge model against natural-language `criteria`.
 
-    Passes at `min_score` (default 4) on the 1-5 scale. Uses structured outputs
-    so the score is always a validated integer, never parsed out of prose.
+    Passes at `min_score` (default 4) on the 1-5 scale.
+
+    On Anthropic the judgement is constrained by structured outputs, so the
+    score is a validated integer rather than something parsed out of prose.
+    Other providers do not all offer that, so there the judge is asked for bare
+    JSON and the result is validated here - same schema, weaker guarantee, and
+    an unparseable judgement fails the case rather than passing it silently.
     """
-    from .client import get_client  # imported lazily to keep unit tests offline
+    from . import providers
+    from .client import complete
 
     min_score = int(spec.get("min_score", 4))
     prompt = (
@@ -133,15 +145,30 @@ def llm_judge(output: str, spec: dict, case: dict) -> GradeResult:
         f"<candidate_answer>\n{output}\n</candidate_answer>"
     )
 
-    response = get_client().messages.parse(
-        model=config.JUDGE_MODEL,
-        max_tokens=1024,
-        system=[{"type": "text", "text": _JUDGE_SYSTEM, "cache_control": {"type": "ephemeral"}}],
-        output_config={"effort": config.JUDGE_EFFORT},
-        messages=[{"role": "user", "content": prompt}],
-        output_format=_Judgement,
-    )
-    verdict = response.parsed_output
+    if config.PROVIDER == "anthropic":
+        response = providers.get_provider()._client.messages.parse(
+            model=config.JUDGE_MODEL,
+            max_tokens=1024,
+            system=[{"type": "text", "text": _JUDGE_SYSTEM, "cache_control": {"type": "ephemeral"}}],
+            output_config={"effort": config.JUDGE_EFFORT},
+            messages=[{"role": "user", "content": prompt}],
+            output_format=_Judgement,
+        )
+        verdict = response.parsed_output
+    else:
+        completion = complete(
+            system=_JUDGE_SYSTEM + _JSON_INSTRUCTION,
+            user=prompt,
+            model=config.JUDGE_MODEL,
+            effort=config.JUDGE_EFFORT,
+            max_tokens=1024,
+        )
+        try:
+            payload = re.sub(r"^```(?:json)?|```$", "", completion.text.strip(), flags=re.MULTILINE)
+            verdict = _Judgement.model_validate_json(payload.strip())
+        except (ValidationError, ValueError) as exc:
+            return GradeResult(False, 0.0, f"judge returned unusable output: {exc}")
+
     ok = verdict.score >= min_score
     return GradeResult(ok, (verdict.score - 1) / 4, f"judge {verdict.score}/5: {verdict.reasoning}")
 

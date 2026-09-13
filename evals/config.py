@@ -6,18 +6,28 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Imported for its preset table only - providers.py depends on nothing here,
+# so this cannot cycle.
+from .providers import PRESETS
+
+_PROVIDER_DEFAULT_MODELS = {name: preset[2] for name, preset in PRESETS.items()}
+
 ROOT = Path(__file__).resolve().parent.parent
 DATASETS_DIR = ROOT / "evals" / "datasets"
 REPORTS_DIR = ROOT / "reports"
 BASELINE_PATH = ROOT / "baselines" / "main.json"
 
-# The model under test. Do not downgrade for cost without changing the baseline
-# too - scores are not comparable across models.
-MODEL = os.environ.get("EVAL_MODEL", "claude-opus-5")
+# Which vendor answers. See providers.py; "anthropic" is the default.
+PROVIDER = os.environ.get("EVAL_PROVIDER", "anthropic").lower()
+
+# The model under test. Falls back to the provider's own default, so switching
+# provider does not require also naming a model. Do not downgrade for cost
+# without regenerating the baseline - scores are not comparable across models.
+MODEL = os.environ.get("EVAL_MODEL") or _PROVIDER_DEFAULT_MODELS.get(PROVIDER, "claude-opus-5")
 
 # Model used by the llm_judge grader. Kept separate so the judge can stay fixed
 # while the model under test changes.
-JUDGE_MODEL = os.environ.get("EVAL_JUDGE_MODEL", "claude-opus-5")
+JUDGE_MODEL = os.environ.get("EVAL_JUDGE_MODEL") or MODEL
 
 # output_config.effort for the model under test: low | medium | high | xhigh | max
 EFFORT = os.environ.get("EVAL_EFFORT", "medium")

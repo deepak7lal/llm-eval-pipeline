@@ -1,8 +1,8 @@
-"""Thin wrapper around the Anthropic SDK.
+"""The single entry point for calling a model.
 
 Three rules the rest of the harness relies on:
-  * the system prompt carries a cache breakpoint, so repeated runs over a suite
-    pay for the prefix once;
+  * the provider is pluggable (see `providers.py`), so the suites, graders,
+    statistics, and gate never learn which vendor answered;
   * every call reports its own token usage, so the scorecard can price the run;
   * identical calls are served from the on-disk cache, so an unrelated PR does
     not re-buy answers it already has.
@@ -13,23 +13,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-import anthropic
-
-from . import cache, config
-
-_client: anthropic.Anthropic | None = None
-
-
-def get_client() -> anthropic.Anthropic:
-    """Lazily build a shared client.
-
-    Credentials resolve from the environment (ANTHROPIC_API_KEY, then
-    ANTHROPIC_AUTH_TOKEN, then an `ant auth login` profile) - never hardcode one.
-    """
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic(max_retries=3)
-    return _client
+from . import cache, config, providers
 
 
 @dataclass
@@ -44,6 +28,11 @@ class Completion:
     from_cache: bool = False
 
 
+def get_client():
+    """The active provider. Named for the call site it replaced."""
+    return providers.get_provider()
+
+
 def complete(
     *,
     system: str,
@@ -56,12 +45,12 @@ def complete(
 ) -> Completion:
     """Run one prompt against the model under test.
 
-    The system prompt carries a cache breakpoint and is passed first, so the
-    whole prefix is reused across every case in a suite. `repeat` distinguishes
-    repeated samples of the same case - it is part of the cache key, so each
-    sample is stored separately and variance survives a cached run.
+    `repeat` distinguishes repeated samples of the same case - it is part of the
+    cache key, so each sample is stored separately and variance survives a
+    cached run.
     """
-    model = model or config.MODEL
+    provider = providers.get_provider()
+    model = model or config.MODEL or provider.default_model
     effort = effort or config.EFFORT
     max_tokens = max_tokens or config.MAX_TOKENS
 
@@ -82,52 +71,37 @@ def complete(
                 from_cache=True,
             )
 
-    client = get_client()
     started = time.perf_counter()
+    retryable = getattr(provider, "retryable", lambda: ())()
 
     last_error: Exception | None = None
     for attempt in range(config.MAX_ATTEMPTS):
         try:
-            response = client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                system=[
-                    {
-                        "type": "text",
-                        "text": system,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ],
-                thinking={"type": "adaptive"},
-                output_config={"effort": effort},
-                messages=[{"role": "user", "content": user}],
+            response = provider.complete(
+                system=system, user=user, model=model, effort=effort, max_tokens=max_tokens
             )
             break
-        except (anthropic.RateLimitError, anthropic.APIConnectionError, anthropic.InternalServerError) as exc:
-            # Retryable: back off and try again within our own envelope.
+        except retryable as exc:  # type: ignore[misc]
+            # Rate limits and transient network faults: back off and retry
+            # within our own envelope. The SDKs already retry internally.
             last_error = exc
             if attempt == config.MAX_ATTEMPTS - 1:
                 raise
             time.sleep(2**attempt)
-        except anthropic.APIStatusError:
-            # 400/404 and friends are bugs in the request - surface immediately.
-            raise
     else:  # pragma: no cover - loop always breaks or raises
         raise RuntimeError("exhausted attempts") from last_error
 
-    text = "".join(b.text for b in response.content if b.type == "text")
-    usage = response.usage
     completion = Completion(
-        text=text,
-        input_tokens=usage.input_tokens,
-        output_tokens=usage.output_tokens,
-        cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
-        cache_write_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        text=response.text,
+        input_tokens=response.input_tokens,
+        output_tokens=response.output_tokens,
+        cache_read_tokens=response.cache_read_tokens,
+        cache_write_tokens=response.cache_write_tokens,
         latency_ms=int((time.perf_counter() - started) * 1000),
-        stop_reason=response.stop_reason,
+        stop_reason="refusal" if response.refused else response.stop_reason,
     )
 
-    if use_cache and completion.stop_reason != "refusal":
+    if use_cache and not response.refused:
         # Refusals are not cached: they are the least stable outcome, and a
         # stale one would keep failing a case the model would now answer.
         cache.put(

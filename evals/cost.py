@@ -18,6 +18,13 @@ PRICING: dict[str, tuple[float, float]] = {
     "claude-opus-4-8": (5.00, 25.00),
     "claude-sonnet-5": (2.00, 10.00),
     "claude-haiku-4-5": (1.00, 5.00),
+    # Free tiers. Priced at zero so the scorecard reads $0.00 rather than
+    # flagging them as unknown - they genuinely cost nothing within quota.
+    "gemini-2.0-flash": (0.0, 0.0),
+    "gemini-2.5-flash": (0.0, 0.0),
+    "llama-3.3-70b-versatile": (0.0, 0.0),
+    "meta-llama/llama-3.3-70b-instruct:free": (0.0, 0.0),
+    "llama3.2": (0.0, 0.0),
 }
 
 CACHE_READ_MULTIPLIER = 0.10

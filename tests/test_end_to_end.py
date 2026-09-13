@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from evals import cli, client
+from evals import cli, providers
 from evals import compare as compare_mod
 from evals import config
 from evals.client import Completion
@@ -155,6 +155,6 @@ class TestCompare:
         assert json.loads(json.dumps(result.to_dict()))["suite"] == "classification"
 
 
-def test_client_module_never_called_without_a_key(offline):
+def test_no_provider_was_ever_constructed(offline):
     """The stub must be what ran - no accidental live client construction."""
-    assert client._client is None
+    assert providers._cached is None
