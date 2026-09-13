@@ -146,13 +146,6 @@ class OpenAICompatProvider:
     name = "openai_compat"
 
     def __init__(self, preset: str) -> None:
-        try:
-            from openai import OpenAI
-        except ImportError as exc:  # pragma: no cover - depends on install extras
-            raise RuntimeError(
-                f"provider {preset!r} needs the openai package: pip install -e '.[compat]'"
-            ) from exc
-
         if preset not in PRESETS:
             raise ValueError(f"unknown provider {preset!r}; known: {sorted(PRESETS)}")
 
@@ -167,6 +160,13 @@ class OpenAICompatProvider:
                 f"provider {preset!r} needs {key_var} in the environment. "
                 f"Get a free key and export it, or use EVAL_PROVIDER=ollama to run locally."
             )
+
+        try:
+            from openai import OpenAI
+        except ImportError as exc:  # pragma: no cover - depends on install extras
+            raise RuntimeError(
+                f"provider {preset!r} needs the openai package: pip install -e '.[compat]'"
+            ) from exc
 
         self._client = OpenAI(api_key=api_key or "not-needed", base_url=base_url, max_retries=3)
 
