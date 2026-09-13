@@ -22,6 +22,7 @@ concurrency:
 
 env:
   EVAL_BUDGET_USD: "5.00"
+  EVAL_PROVIDER: groq
 
 jobs:
   # Fast, free, no API key. The end-to-end tests stub the model, so broken
@@ -68,7 +69,7 @@ jobs:
       - name: Run evals
         id: run
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EVAL_EFFORT: ${{ inputs.effort || 'medium' }}
           EVAL_REPEATS: ${{ inputs.repeats || '1' }}
           EVAL_CONCURRENCY: "8"
@@ -122,7 +123,7 @@ jobs:
 
       - name: Compare variants
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EVAL_REPEATS: "5"
         run: python -m evals compare --variant "${{ vars.EVAL_VARIANT || 'terse' }}"
 
@@ -162,7 +163,7 @@ jobs:
       # so it is worth buying a tighter interval once.
       - name: Re-run and record baseline
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EVAL_REPEATS: "3"
           EVAL_BUDGET_USD: "15.00"
         run: python -m evals run --update-baseline --no-gate
