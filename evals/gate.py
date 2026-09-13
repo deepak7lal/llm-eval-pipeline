@@ -35,9 +35,12 @@ class SuiteVerdict:
     flaky: list[str]
     failed: bool
     reasons: list[str]
+    errored: bool = False
 
     @property
     def status(self) -> str:
+        if self.errored:
+            return "ERROR"
         if self.failed:
             return "FAIL"
         if self.flaky:
@@ -59,6 +62,11 @@ class RunVerdict:
     @property
     def failed(self) -> bool:
         return self.over_budget or any(s.failed for s in self.suites)
+
+    @property
+    def errored(self) -> bool:
+        """No suite produced a measurable score, so the run says nothing about quality."""
+        return bool(self.suites) and all(s.errored for s in self.suites)
 
     @property
     def reasons(self) -> list[str]:
@@ -111,6 +119,26 @@ def evaluate(
         reasons: list[str] = []
         p_value: float | None = None
         gating = result.n_trials >= gate.min_cases_to_gate
+
+        if result.errored:
+            verdicts.append(
+                SuiteVerdict(
+                    suite=result.name,
+                    pass_rate=result.pass_rate,
+                    interval=result.interval,
+                    baseline=None if prior is None else prior.pass_rate,
+                    delta=None,
+                    p_value=None,
+                    flaky=[],
+                    failed=True,
+                    reasons=[
+                        f"all {result.n_trials} trials errored before the model answered: "
+                        f"{result.first_error}"
+                    ],
+                    errored=True,
+                )
+            )
+            continue
 
         if result.pass_rate < gate.min_pass_rate:
             reasons.append(

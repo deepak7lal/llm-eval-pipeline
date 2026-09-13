@@ -15,7 +15,13 @@ from .cost import Spend, unknown_models
 from .gate import RunVerdict
 from .runner import SuiteResult
 
-_ICON = {"PASS": "[PASS]", "WARN": "[WARN]", "FLAKY": "[FLAKY]", "FAIL": "[FAIL]"}
+_ICON = {
+    "PASS": "[PASS]",
+    "WARN": "[WARN]",
+    "FLAKY": "[FLAKY]",
+    "FAIL": "[FAIL]",
+    "ERROR": "[ERROR]",
+}
 
 
 def _delta(delta: float | None) -> str:
@@ -25,7 +31,7 @@ def _delta(delta: float | None) -> str:
 def to_markdown(results: list[SuiteResult], run: RunVerdict) -> str:
     """A scorecard compact enough to post as a PR comment."""
     by_name = {v.suite: v for v in run.suites}
-    overall = "FAIL" if run.failed else "PASS"
+    overall = "ERROR" if run.errored else "FAIL" if run.failed else "PASS"
 
     total_trials = sum(r.n_trials for r in results)
     total_successes = sum(r.successes for r in results)
@@ -37,7 +43,12 @@ def to_markdown(results: list[SuiteResult], run: RunVerdict) -> str:
         f"## LLM eval scorecard - {_ICON[overall]}",
         "",
         f"`{config.MODEL}` at effort `{config.EFFORT}` - "
-        f"**{total_successes}/{total_trials} trials passed** "
+        + (
+            "**the run never reached the model**, so this says nothing about quality. "
+            if run.errored
+            else ""
+        )
+        + f"**{total_successes}/{total_trials} trials passed** "
         f"across {len(results)} suite(s). Cost: **${run.usd:.4f}** "
         f"of a ${run.budget:.2f} budget.",
         "",

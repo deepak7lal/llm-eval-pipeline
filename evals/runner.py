@@ -79,6 +79,25 @@ class SuiteResult:
         return self.successes / self.n_trials if self.trials else 0.0
 
     @property
+    def n_errors(self) -> int:
+        """Trials that never produced gradeable output."""
+        return sum(t.error is not None for t in self.trials)
+
+    @property
+    def errored(self) -> bool:
+        """Every trial failed before the model answered.
+
+        A suite in this state has no measurable pass rate. Auth, network, and
+        rate-limit failures all land here, and reporting them as a 0% score
+        would blame the prompt for a broken pipe.
+        """
+        return bool(self.trials) and self.n_errors == self.n_trials
+
+    @property
+    def first_error(self) -> str | None:
+        return next((t.error for t in self.trials if t.error), None)
+
+    @property
     def interval(self) -> Interval:
         return wilson(self.successes, self.n_trials, alpha=config.ALPHA)
 

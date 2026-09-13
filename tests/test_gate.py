@@ -24,6 +24,15 @@ def base(rate, trials):
     return {"s": _BaselineEntry(pass_rate=rate, trials=trials)}
 
 
+def errored_suite(name, total, message="TypeError: could not resolve authentication method"):
+    """A suite where every trial died before the model answered."""
+    trials = [
+        TrialResult(case_id=f"c{i}", repeat=0, passed=False, score=0.0, error=message)
+        for i in range(total)
+    ]
+    return SuiteResult(name=name, trials=trials)
+
+
 class TestFloor:
     def test_passes_above_floor_with_no_baseline(self):
         run = evaluate([suite("s", 9, 10)], baseline={})
@@ -120,3 +129,51 @@ class TestBudget:
         assert not run.over_budget
         assert not run.failed
         assert run.usd == pytest.approx(0.01, abs=0.01)
+
+
+class TestInfrastructureFailures:
+    """A run that never reached the model must not be reported as a quality score.
+
+    Auth, network, and rate-limit failures make every trial fail, which is
+    arithmetically identical to a 0% pass rate. Reporting that as a regression
+    blames the prompt for a broken pipe, and a gate that cries wolf gets muted.
+    """
+
+    def test_all_trials_errored_is_reported_as_error_not_fail(self):
+        verdict = evaluate([errored_suite("s", 6)], base(1.0, 60))
+        assert verdict.suites[0].status == "ERROR"
+        assert verdict.suites[0].errored is True
+
+    def test_an_errored_suite_still_fails_the_build(self):
+        verdict = evaluate([errored_suite("s", 6)], base(1.0, 60))
+        assert verdict.failed is True
+
+    def test_the_reason_names_the_underlying_error(self):
+        verdict = evaluate([errored_suite("s", 6)], base(1.0, 60))
+        reason = " ".join(verdict.suites[0].reasons)
+        assert "authentication" in reason
+        assert "6 trials errored" in reason
+
+    def test_an_errored_suite_is_not_blamed_for_regressing(self):
+        verdict = evaluate([errored_suite("s", 6)], base(1.0, 60))
+        reasons = " ".join(verdict.suites[0].reasons)
+        assert "regressed" not in reasons
+        assert "below the floor" not in reasons
+        assert verdict.suites[0].delta is None
+
+    def test_a_run_of_only_errored_suites_is_flagged_as_errored(self):
+        verdict = evaluate([errored_suite("s", 6)], base(1.0, 60))
+        assert verdict.errored is True
+
+    def test_a_genuine_zero_score_is_still_a_normal_failure(self):
+        verdict = evaluate([suite("s", 0, 6)], base(1.0, 60))
+        assert verdict.suites[0].status == "FAIL"
+        assert verdict.suites[0].errored is False
+        assert verdict.errored is False
+
+    def test_a_partly_errored_suite_is_still_scored(self):
+        trials = errored_suite("s", 3).trials + suite("s", 3, 3).trials
+        result = SuiteResult(name="s", trials=trials)
+        assert result.errored is False
+        assert result.n_errors == 3
+        assert evaluate([result], base(1.0, 60)).suites[0].status != "ERROR"
