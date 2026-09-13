@@ -72,7 +72,7 @@ class AnthropicProvider:
         import anthropic
 
         self._sdk = anthropic
-        self._client = anthropic.Anthropic(max_retries=3)
+        self._client = anthropic.Anthropic(max_retries=6)
 
     def complete(self, *, system: str, user: str, model: str, effort: str, max_tokens: int) -> Response:
         response = self._client.messages.create(

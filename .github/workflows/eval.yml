@@ -69,6 +69,7 @@ jobs:
         id: run
         env:
           EVAL_PROVIDER: groq
+          EVAL_CONCURRENCY: "2"
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EVAL_EFFORT: ${{ inputs.effort || 'medium' }}
           EVAL_REPEATS: ${{ inputs.repeats || '1' }}
@@ -124,6 +125,7 @@ jobs:
       - name: Compare variants
         env:
           EVAL_PROVIDER: groq
+          EVAL_CONCURRENCY: "2"
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EVAL_REPEATS: "5"
         run: python -m evals compare --variant "${{ vars.EVAL_VARIANT || 'terse' }}"
@@ -165,6 +167,7 @@ jobs:
       - name: Re-run and record baseline
         env:
           EVAL_PROVIDER: groq
+          EVAL_CONCURRENCY: "2"
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EVAL_REPEATS: "3"
           EVAL_BUDGET_USD: "15.00"
