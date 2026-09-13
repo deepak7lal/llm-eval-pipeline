@@ -69,11 +69,10 @@ jobs:
         id: run
         env:
           EVAL_PROVIDER: groq
-          EVAL_CONCURRENCY: "2"
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EVAL_EFFORT: ${{ inputs.effort || 'medium' }}
           EVAL_REPEATS: ${{ inputs.repeats || '1' }}
-          EVAL_CONCURRENCY: "8"
+          EVAL_CONCURRENCY: "2"
         # Never abort here - the scorecard must be published even on a red gate,
         # so the exit code is captured and re-raised in the final step.
         run: |
