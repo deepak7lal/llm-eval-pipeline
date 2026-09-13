@@ -71,6 +71,47 @@ Credentials resolve from `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an
 `ant auth login` profile — in that order. Nothing is hardcoded. In CI, add the
 key as the repository secret `ANTHROPIC_API_KEY`.
 
+No Anthropic key? The harness runs against several other providers, two of them
+free and one entirely local. See [Providers](#providers).
+
+## Providers
+
+The harness measures prompts, not vendors, so the model call sits behind one
+small interface and everything downstream — graders, statistics, the gate, the
+scorecard — works the same whichever provider is selected.
+
+```bash
+export EVAL_PROVIDER=groq
+export GROQ_API_KEY=...     # free tier, no card
+python -m evals run
+```
+
+| `EVAL_PROVIDER` | Default model | Key variable | Cost |
+|---|---|---|---|
+| `anthropic` *(default)* | `claude-opus-5` | `ANTHROPIC_API_KEY` | paid |
+| `groq` | `openai/gpt-oss-20b` | `GROQ_API_KEY` | free tier, no card |
+| `gemini` | `gemini-2.0-flash` | `GEMINI_API_KEY` | free tier, no card |
+| `openrouter` | `meta-llama/llama-3.3-70b-instruct:free` | `OPENROUTER_API_KEY` | free models available |
+| `ollama` | `llama3.2` | none | local, nothing leaves the machine |
+| `openai` | `gpt-4o-mini` | `OPENAI_API_KEY` | paid |
+
+Everything except `anthropic` speaks the OpenAI chat-completions shape through
+one adapter, so they need the extra that ships that client:
+
+```bash
+pip install -e ".[dev,compat]"
+```
+
+`EVAL_MODEL` overrides the preset's default, and `EVAL_BASE_URL` overrides its
+endpoint — enough to point `ollama` at a remote server, or any preset at a
+gateway. Effort and prompt caching are Anthropic features; on the other
+providers `effort` is accepted and ignored rather than failing, since the suites
+declare it.
+
+**Scores are not comparable across providers or models.** Switching either means
+regenerating `baselines/main.json`, or every suite reads as a regression against
+numbers a different model produced.
+
 ## Usage
 
 ```bash
@@ -157,8 +198,8 @@ CI rewrites it after a merge to `main` (at higher `repeats`, since it is compare
 against for weeks) and the bot commits it. Do not edit it by hand — a PR that
 needs a lower bar is a PR that made things worse.
 
-Regenerate it deliberately when you change the model or a suite's contents;
-scores are not comparable across either.
+Regenerate it deliberately when you change the provider, the model, or a
+suite's contents; scores are not comparable across any of them.
 
 ## Configuration
 
@@ -166,7 +207,9 @@ Everything below is an env var, with defaults in `evals/config.py`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `EVAL_MODEL` | `claude-opus-5` | Model under test |
+| `EVAL_PROVIDER` | `anthropic` | Provider preset; see [Providers](#providers) |
+| `EVAL_BASE_URL` | per preset | Override an OpenAI-compatible endpoint |
+| `EVAL_MODEL` | per provider | Model under test |
 | `EVAL_JUDGE_MODEL` | `claude-opus-5` | Model used by `llm_judge` |
 | `EVAL_EFFORT` | `medium` | `low` … `max` |
 | `EVAL_REPEATS` | `1` | Samples per case |
