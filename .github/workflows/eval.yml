@@ -69,6 +69,7 @@ jobs:
         id: run
         env:
           EVAL_PROVIDER: groq
+          EVAL_MODEL: openai/gpt-oss-120b
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EVAL_EFFORT: ${{ inputs.effort || 'medium' }}
           EVAL_REPEATS: ${{ inputs.repeats || '1' }}
@@ -124,6 +125,7 @@ jobs:
       - name: Compare variants
         env:
           EVAL_PROVIDER: groq
+          EVAL_MODEL: openai/gpt-oss-120b
           EVAL_CONCURRENCY: "2"
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EVAL_REPEATS: "5"
@@ -166,6 +168,7 @@ jobs:
       - name: Re-run and record baseline
         env:
           EVAL_PROVIDER: groq
+          EVAL_MODEL: openai/gpt-oss-120b
           EVAL_CONCURRENCY: "2"
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EVAL_REPEATS: "3"
