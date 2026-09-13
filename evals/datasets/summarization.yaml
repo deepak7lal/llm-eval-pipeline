@@ -41,3 +41,203 @@ cases:
           about 90 minutes and that no data was lost. Must attribute the cause to
           a cache rule that disabled caching of static assets and overloaded the
           origin. Must NOT include rollback or cache-warming steps, or timestamps.
+
+  - id: no-customer-impact
+    input: |
+      A nightly reconciliation job failed for three consecutive runs after a
+      schema migration renamed the settlements column. Finance received no
+      automated report on those mornings and pulled the figures by hand. No
+      customer-facing system read that table, and no user request failed.
+      Restored by updating the job query.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must say that customers were unaffected, or otherwise make clear the
+          impact was internal and limited to finance reporting. Must NOT claim or
+          imply that users saw errors, slowness, or outages. Must attribute the
+          cause to a renamed column left unhandled by the reconciliation job.
+
+  - id: partial-region
+    input: |
+      An expired TLS certificate on the eu-west load balancer rejected all HTTPS
+      connections for 23 minutes. Users routed to that region, about 8% of
+      traffic, could not reach the API at all. Other regions were unaffected
+      throughout. Renewed the certificate and added a 30-day expiry alert.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must convey that only a subset of users, those in one region or about
+          8% of traffic, were affected, rather than describing a global outage.
+          Must attribute the cause to an expired TLS certificate. Must NOT
+          mention the renewal or the new alert.
+
+  - id: data-loss
+    input: |
+      A retention script intended for staging ran against production and deleted
+      audit log rows older than 30 days. 4.1 million rows were removed
+      permanently; backups had a 6-hour gap covering part of the range. Customer
+      requests were served normally throughout. Affected customers cannot
+      retrieve audit history older than 30 days.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must state that audit history was permanently lost and cannot be
+          recovered for the affected period. Must NOT claim that no data was lost.
+          Should make clear that live requests kept working. Must attribute the
+          cause to a retention script run against production instead of staging.
+
+  - id: third-party-outage
+    input: |
+      Our payment provider returned 503s for 40 minutes. Checkout attempts failed
+      at the final step; carts were preserved. Roughly 2,300 purchases could not
+      be completed. Our own services stayed healthy for the duration. The
+      provider confirmed a fault in their card authorisation tier.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must state that customers could not complete purchases and give a sense
+          of scale. Must attribute the cause to an external payment provider
+          failure, not to our own systems. Must NOT suggest our services were
+          down.
+
+  - id: gradual-degradation
+    input: |
+      A connection leak in the search service consumed the pool over roughly six
+      hours. Search latency climbed from 120ms to 4s before instances began
+      refusing connections. Search was unusable for the last 35 minutes of that
+      window; the rest of the product worked normally. Restarting the service
+      cleared it.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must convey that search progressively slowed and then became unusable,
+          not that the whole product went down. Must attribute the cause to a
+          connection leak exhausting the pool. Must NOT mention the restart.
+
+  - id: red-herring-deploy
+    input: |
+      Error rates rose sharply nine minutes after a routine deploy, and the
+      deploy was rolled back. Rates did not recover. The true cause was a
+      third-party DNS provider returning SERVFAIL for our vendor domain, which
+      began independently around the same time. API calls depending on that
+      vendor failed for 50 minutes, affecting address validation at signup.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must attribute the cause to the DNS provider failing to resolve a
+          vendor domain, NOT to the deploy. Must make clear the impact was
+          limited to address validation at signup. A summary blaming the deploy
+          scores 1.
+
+  - id: timestamp-heavy
+    input: |
+      08:02 alerts fired for elevated 5xx. 08:05 on-call acknowledged. 08:11 a
+      bad feature flag was identified. 08:14 the flag was disabled. 08:20 error
+      rates returned to baseline. During the window roughly 15% of API requests
+      returned 500s, concentrated on the orders endpoint.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must state that about 15% of API requests failed, concentrated on
+          orders, and attribute it to a misconfigured feature flag. Must NOT
+          include any clock times. Any summary containing a time of day scores 1.
+
+  - id: remediation-heavy
+    input: |
+      A memory limit set too low caused the notification worker to be killed
+      repeatedly. Email and push notifications were delayed by up to four hours
+      for all users; none were dropped. Remediation: raised the limit, added a
+      heap dump on OOM, split the worker into two pools, added an alert on
+      restart count, and scheduled a load test for next sprint.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must state that notifications were delayed by up to four hours and that
+          none were lost. Must attribute the cause to the worker being killed by
+          a memory limit set too low. Must NOT list any of the remediation items.
+
+  - id: credential-exposure
+    input: |
+      A debug endpoint left enabled in production echoed request headers,
+      including Authorization values, into a log index readable by all staff.
+      Approximately 900 customer API tokens appeared in logs over eleven days.
+      No evidence of misuse. Tokens for affected customers were rotated and the
+      endpoint removed.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must state that customer API tokens were exposed in internal logs and
+          give a sense of scale or duration. Should note there is no evidence of
+          misuse. Must attribute the cause to a debug endpoint left enabled that
+          logged authorization headers. Must NOT mention rotation or removal.
+
+  - id: rate-limit-misfire
+    input: |
+      A new rate limit intended for a scraping pattern matched shared corporate
+      NAT addresses. Users behind those gateways, mostly enterprise customers,
+      received 429s on every request for 2 hours. Consumer traffic was
+      unaffected. The rule was narrowed to include a user-agent condition.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must convey that enterprise customers sharing corporate gateways were
+          blocked entirely while other users were fine. Must attribute the cause
+          to a rate limit rule that matched shared addresses too broadly. Must
+          NOT mention how the rule was narrowed.
+
+  - id: queue-backlog
+    input: |
+      A poison message caused the ingestion consumer to crash-loop. Events were
+      not lost but sat unprocessed; the backlog reached 1.9 million events.
+      Dashboards showed data up to 3 hours stale for all customers. Live API
+      responses were unaffected. Draining took 40 minutes after the message was
+      quarantined.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must convey that dashboards showed stale data for several hours while
+          live requests kept working, and that no events were lost. Must
+          attribute the cause to a poison message crash-looping the consumer.
+          Must NOT mention quarantining or draining.
+
+  - id: mobile-clients-only
+    input: |
+      A response field was renamed from user_id to userId without a deprecation
+      window. Web clients read both. iOS and Android builds older than 4.2
+      crashed on the profile screen, roughly 30% of mobile users, until they
+      updated or the field was restored. Restored the old field alongside the new
+      one after 6 hours.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must convey that older mobile app users, roughly 30% of mobile traffic,
+          crashed on a specific screen while web users were unaffected. Must
+          attribute the cause to a renamed API field shipped without a
+          deprecation window. Must NOT mention restoring the field.
+
+  - id: ambiguous-cause
+    input: |
+      Checkout latency doubled for 4 hours, pushing about 3% of attempts past the
+      client timeout. Investigation found a database plan change coinciding with
+      a traffic shift from a marketing campaign; engineers could not determine
+      which triggered it. Latency returned to normal without intervention.
+    graders:
+      - type: llm_judge
+        min_score: 4
+        criteria: |
+          Must state that a small share of checkouts timed out over several
+          hours. Must convey that the cause was not conclusively determined,
+          naming the database plan change and the traffic shift as candidates. A
+          summary asserting one definite cause scores 2 or lower.
