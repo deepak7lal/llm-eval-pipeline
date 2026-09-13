@@ -1,13 +1,14 @@
 """Gate logic tests - the part that decides whether CI goes red."""
 
 import dataclasses
+import json
 
 import pytest
 
 from evals import config
 from evals.config import GATE
 from evals.cost import Spend
-from evals.gate import _BaselineEntry, evaluate
+from evals.gate import ContaminatedBaseline, _BaselineEntry, evaluate, write_baseline
 from evals.runner import SuiteResult, TrialResult
 
 
@@ -177,3 +178,41 @@ class TestInfrastructureFailures:
         assert result.errored is False
         assert result.n_errors == 3
         assert evaluate([result], base(1.0, 60)).suites[0].status != "ERROR"
+
+
+class TestBaselineContamination:
+    """A baseline measured through a broken pipe is worse than no new baseline.
+
+    Partial errors still count as failed trials, so a run that lost two thirds
+    of its calls to a 401 looks like a collapse in quality. Recording that would
+    lower the bar every later run is compared against.
+    """
+
+    def test_errored_trials_block_the_write(self, tmp_path):
+        results = [suite("s", 4, 6), errored_suite("e", 3)]
+        with pytest.raises(ContaminatedBaseline):
+            write_baseline(results, tmp_path / "main.json")
+
+    def test_a_partly_errored_suite_also_blocks_the_write(self, tmp_path):
+        mixed = SuiteResult(name="s", trials=errored_suite("s", 2).trials + suite("s", 4, 4).trials)
+        with pytest.raises(ContaminatedBaseline):
+            write_baseline([mixed], tmp_path / "main.json")
+
+    def test_the_refusal_names_the_suite_and_the_error(self, tmp_path):
+        with pytest.raises(ContaminatedBaseline) as exc:
+            write_baseline([errored_suite("e", 3)], tmp_path / "main.json")
+        message = str(exc.value)
+        assert "e 3/3" in message
+        assert "authentication" in message
+
+    def test_nothing_is_written_when_it_refuses(self, tmp_path):
+        path = tmp_path / "main.json"
+        with pytest.raises(ContaminatedBaseline):
+            write_baseline([errored_suite("e", 3)], path)
+        assert not path.exists()
+
+    def test_a_clean_run_still_records(self, tmp_path):
+        path = write_baseline([suite("s", 5, 6)], tmp_path / "main.json")
+        recorded = json.loads(path.read_text())
+        assert recorded["suites"]["s"]["successes"] == 5
+        assert recorded["suites"]["s"]["trials"] == 6

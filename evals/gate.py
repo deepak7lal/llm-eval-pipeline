@@ -203,8 +203,28 @@ def _total_spend(results: list[SuiteResult]) -> Spend:
     return total
 
 
+class ContaminatedBaseline(RuntimeError):
+    """Refused to record a baseline measured through a broken pipe."""
+
+
 def write_baseline(results: list[SuiteResult], path: Path | None = None) -> Path:
-    """Persist current scores as the new baseline (run on main, not on PRs)."""
+    """Persist current scores as the new baseline (run on main, not on PRs).
+
+    Refuses when any trial errored. A baseline is compared against for weeks,
+    so recording one that counted auth or rate-limit failures as wrong answers
+    would quietly lower the bar every later run is measured against, which is
+    the opposite of what a gate is for. Leaving the old baseline in place is
+    always the safer failure.
+    """
+    errored = [(r.name, r.n_errors, r.n_trials) for r in results if r.n_errors]
+    if errored:
+        detail = ", ".join(f"{name} {n}/{total}" for name, n, total in errored)
+        first = next(r.first_error for r in results if r.n_errors)
+        raise ContaminatedBaseline(
+            f"refusing to record a baseline: trials errored before the model answered "
+            f"({detail}). First error: {first}"
+        )
+
     path = path or config.BASELINE_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {

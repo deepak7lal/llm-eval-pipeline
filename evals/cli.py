@@ -15,7 +15,7 @@ import sys
 from . import cache as cache_mod
 from . import compare as compare_mod
 from . import config
-from .gate import evaluate, write_baseline
+from .gate import ContaminatedBaseline, evaluate, write_baseline
 from .report import to_markdown, write_reports
 from .runner import discover_suites, run_all
 from .stats import required_trials
@@ -46,7 +46,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"wrote {md_path} and {json_path}", file=sys.stderr)
 
     if args.update_baseline:
-        path = write_baseline(results)
+        try:
+            path = write_baseline(results)
+        except ContaminatedBaseline as exc:
+            print(f"baseline NOT updated: {exc}", file=sys.stderr)
+            return 1
         print(f"baseline updated: {path}", file=sys.stderr)
 
     if args.no_gate:
