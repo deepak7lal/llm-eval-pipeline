@@ -4,11 +4,11 @@
   "alpha": 0.05,
   "suites": {
     "classification": {
-      "pass_rate": 0.8333,
-      "mean_score": 0.8333,
+      "pass_rate": 0.9444,
+      "mean_score": 0.9444,
       "cases": 6,
       "trials": 18,
-      "successes": 15
+      "successes": 17
     },
     "extraction": {
       "pass_rate": 1.0,
@@ -19,7 +19,7 @@
     },
     "summarization": {
       "pass_rate": 0.6667,
-      "mean_score": 0.8333,
+      "mean_score": 0.7917,
       "cases": 2,
       "trials": 6,
       "successes": 4
